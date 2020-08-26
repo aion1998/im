@@ -2,10 +2,13 @@
 <html>
 <head>
     <title>websocket 简易例子</title>
-    <script src="http://code.jquery.com/jquery-1.12.4.min.js"></script>
-    <script src="https://vuejs.org/js/vue.min.js"></script>
+    <script src="https://cdn.bootcdn.net/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
+    <script src="https://cdn.bootcdn.net/ajax/libs/vue/2.6.12/vue.min.js"></script>
+    <style>
+        .lstmessage {
+        }
+    </style>
 </head>
-
 <body>
 
     <div id="app">
@@ -19,13 +22,13 @@
         </div>
 
         <hr>
-        <div v-if="currentChannel.chan">
+        <div class="lstmessage" v-if="currentChannel.chan">
             <h1>{{currentChannel.chan}}</h1>
             <div v-for="msg in currentChannel.msgs" style="margin-bottom:9px;">
                 <div v-if="msg.msg.type == 'welcome'">欢迎 {{msg.senderNick||msg.sender}} 加入</div>
                 <div v-else-if="msg.msg.type == 'changenick'">{{msg.msg.oldnick||msg.sender}} 改名为 {{msg.msg.newnick||msg.sender}}</div>
                 <div v-else>
-                    <div style="color:#aaa;">{{msg.senderNick||msg.sender}} {{new Date(msg.time)}}</div>
+                    <div style="color:#aaa;">{{msg.senderNick||msg.sender}} {{getLocalTime(msg.time,1)}}</div>
                     <div>{{msg.msg.content}}</div>
                 </div>
             </div>
@@ -56,10 +59,14 @@
                     var _self = this;
                     if (top != window) return;
                     var data = {};
-                    //_self.id = localStorage.getItem('websocketid');
+                    _self.id = localStorage.getItem('websocketid');
+                    _self.nick = localStorage.getItem('nickname');
+
                     if (_self.id != '' && _self.id) data.websocketId = _self.id;
+
                     ajax('/ws/pre-connect', data, function (d) {
-                        if (!(_self.id != '' && _self.id)) _self.id = d.websocketId; //localStorage.setItem('websocketid', _self.id = d.websocketId); //存储本地重复使用
+                        // if (!(_self.id != '' && _self.id)) _self.id = d.websocketId;
+                        localStorage.setItem('websocketid', _self.id = d.websocketId); //存储本地重复使用
                         var url = d.server;
                         if (gsocket) gsocket.close();
                         gsocket = null;
@@ -100,6 +107,8 @@
                 onmessage: function (msg) {
                     var _self = this;
                     msg = JSON.parse(msg);
+                    console.log("收到消息", msg);
+
                     if (msg.type == 'chanmsg') { //群聊天消息
                         _self.currentChannel.msgs.push(msg);
                     }
@@ -107,12 +116,14 @@
                 getChannels: function () {
                     var _self = this;
                     ajax('/ws/get-channels', {}, function (rt) {
+                        console.log("获取战场列表成功", rt);
                         _self.channels = rt.channels;
                     });
                 },
                 joinChannel: function (chan) {
                     var _self = this;
                     ajax('/ws/subscr-channel', { websocketid: _self.id, channel: chan }, function (rt) {
+                        console.log("加入战场成功", rt);
                         _self.currentChannel.chan = chan;
                         _self.currentChannel.msgs.splice(0, _self.currentChannel.msgs.length);
                         _self.sendChannelMsg({ type: 'welcome' });
@@ -122,12 +133,13 @@
                     var chan = prompt('请输入聊天室名称，若存在则直接进入');
                     if (chan) this.joinChannel(chan);
                 },
+                //发送聊天群消息
                 sendChannelMsg: function (msg) {
-                    if (!this.currentChannel.chan) return alert('请加入一个聊天群');
+                    if (!this.currentChannel.chan) return alert('请加入一个战场');
                     var _self = this;
                     var data = { type: 'chanmsg', sender: _self.id, senderNick: _self.nick, chan: _self.currentChannel.chan, time: new Date().getTime(), msg: msg, };
                     ajax('/ws/send-channelmsg', { websocketId: _self.id, channel: _self.currentChannel.chan, message: JSON.stringify(data) }, function (rt) {
-
+                        console.log("消息发送成功", rt);
                     });
                 },
                 changeNick: function () {
@@ -136,7 +148,33 @@
                     if (_self.nick != newnick) {
                         debugger
                         _self.sendChannelMsg({ type: 'changenick', oldnick: _self.nick, newnick: newnick });
-                        _self.nick = newnick;
+                        //存储名字到本地
+                        localStorage.setItem('nickname', _self.nick = newnick);
+                    }
+                },
+                //工具方法
+                getLocalTime: function (timestamp, num) {
+                    
+                    
+                    timestamp = timestamp + '';
+                    timestamp = parseInt(timestamp);
+                    timestamp = timestamp.length == 10 ? timestamp * 1000 : timestamp;
+                    var date = new Date(timestamp);
+                    var y = date.getFullYear();
+                    var m = date.getMonth() + 1;
+                    m = m < 10 ? ('0' + m) : m;
+                    var d = date.getDate();
+                    d = d < 10 ? ('0' + d) : d;
+                    var h = date.getHours();
+                    h = h < 10 ? ('0' + h) : h;
+                    var minute = date.getMinutes();
+                    var second = date.getSeconds();
+                    minute = minute < 10 ? ('0' + minute) : minute;
+                    second = second < 10 ? ('0' + second) : second;
+                    if (num == 0) {
+                        return y + '-' + m + '-' + d;
+                    } else {
+                        return y + '-' + m + '-' + d + ' ' + h + ':' + minute + ':' + second;
                     }
                 }
             }
